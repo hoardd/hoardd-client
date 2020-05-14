@@ -3,7 +3,6 @@ package main
 // author: cham423
 // this is an example of a client for leaks 2.0 aka the Pivot OSINT platform
 
-// file size estimates - 50MB per 1 million results
 // time estimates - 3 min per 1 million results
 // by default this script will limit you to 1 million results - bypass with flag
 
@@ -178,6 +177,9 @@ func main() {
 		log.Fatal("Missing required password parameter, exiting")
 	} else if limit == 0 {
 		log.Printf("warning: no limit defined, this might take a LONG time")
+	} else if domain == "" {
+		flag.PrintDefaults()
+		log.Fatal("Missing required domain parameter, exiting")
 	}
 
 	// validate args

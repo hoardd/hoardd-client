@@ -10,8 +10,33 @@ More data and features being added regularly.
 If you have credentials, a kibana service is provided as well for more in-depth manual investigation and browsing of other OSINT. 
 
 ## Basic Usage
-<screenshot>
-
+![leak_usage](https://user-images.githubusercontent.com/32488787/81986538-f9e8ae00-9605-11ea-9681-d5500076af41.png)
+### Help Output
+```
+./leak-client
+  -config string
+    	path to YAML config file
+  -debug
+    	Enable or disable debug output
+  -domain string
+    	domain to search
+  -index string
+    	Elasticsearch index name i.e. leak_linkedin (default "leak_*")
+  -limit int
+    	Maximum number of results to return (default 1,000,000) - set to 0 for no limit
+  -outfile string
+    	Output filename
+  -password string
+    	Elasticsearch password
+  -sniff
+    	enable or disable cluster health check (default true)
+  -url string
+    	URL for ElasticsSearch endpoint
+  -username string
+    	Elasticsearch username
+  -verbose
+    	Enable or disable verbose output
+```
 
 ## Notes
 - file size estimate: 50MB/1 million results
