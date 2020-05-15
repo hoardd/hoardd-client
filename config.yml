@@ -6,4 +6,3 @@ domain: ""
 limit: 1000000
 debug: false
 verbose: true
-sniff : true

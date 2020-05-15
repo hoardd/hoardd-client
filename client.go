@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
+	"github.com/matryer/try"
 	"github.com/olivere/elastic/v7"
 	"gopkg.in/yaml.v2"
 )
@@ -47,7 +48,6 @@ type Config struct {
 	Debug    bool   `yaml:"debug"`
 	Limit    int    `yaml:"limit"`
 	Domain   string `yaml:"domain"`
-	Sniff    bool   `yaml:"sniff"`
 }
 
 // Leak definition from ElasticSearch JSON structure
@@ -88,7 +88,6 @@ func main() {
 		flagLimit    = flag.Int("limit", 0, "Maximum number of results to return (default 1,000,000) - set to 0 for no limit")
 		flagDebug    = flag.Bool("debug", false, "Enable or disable debug output")
 		flagVerbose  = flag.Bool("verbose", false, "Enable or disable verbose output")
-		flagSniff    = flag.Bool("sniff", true, "enable or disable cluster health check")
 	)
 	flag.Parse()
 	var config = *flagConfig
@@ -102,7 +101,6 @@ func main() {
 		debug    bool
 		limit    int
 		domain   string
-		sniff    bool
 	)
 	// todo : check for path
 	// YAML args
@@ -126,7 +124,6 @@ func main() {
 		debug = cfg.Debug
 		limit = cfg.Limit
 		domain = cfg.Domain
-		sniff = cfg.Sniff
 		f.Close()
 	}
 	// check for empty args
@@ -158,9 +155,6 @@ func main() {
 	if isFlagPassed("domain") {
 		domain = *flagDomain
 	}
-	if isFlagPassed("sniff") {
-		sniff = *flagSniff
-	}
 	//flag.PrintDefaults()
 	//log.Fatal("Missing url parameter, exiting")
 	if inputURL == "" {
@@ -187,19 +181,40 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error parsing url parameter: %s", inputURL)
 	}
+
+	//create client with retry
+	var client *elastic.Client
+	check(err)
+	err = try.Do(func(attempt int) (bool, error) {
+		var err error
+		client, err = elastic.NewClient(elastic.SetURL(inputURL), elastic.SetSniff(false), elastic.SetBasicAuth(username, password))
+		if err != nil {
+			log.Printf("error connecting to elasticsearch: %s, retrying in 15s", err)
+			time.Sleep(15)
+		}
+		return attempt < 3, err // try 3 times
+	})
+	check(err)
+	// check cluster health
+	ctx := context.Background()
+	res, err := client.ClusterHealth().Index(index).Do(ctx)
+	check(err)
+	if verbose {
+		log.Printf("cluster health: %s", res.Status)
+	}
+	if res.Status == "red" {
+		log.Fatal("Cluster Health is red, exiting. Contact Support.")
+	}
 	// auto file output
 	if outfile == "" {
 		outfile = fmt.Sprintf("%s_%d.csv", domain, time.Now().Unix())
 		log.Printf("warning: no outfile specified, automatically generating one: %s", outfile)
 	}
-	client, err := elastic.NewClient(elastic.SetURL(inputURL), elastic.SetSniff(sniff), elastic.SetBasicAuth(username, password))
-	check(err)
 
 	// check path exists/file create permissions
 	f, err := os.Create(outfile)
 	check(err)
 	defer f.Close()
-	// client definition
 	// query definition
 	searchQuery := elastic.NewBoolQuery()
 	queryString := fmt.Sprintf(`email:"*@%v"`, domain)
@@ -214,7 +229,6 @@ func main() {
 	}
 
 	//count results of query
-	ctx := context.Background()
 	total, err := client.Count(index).Query(searchQuery).Do(ctx)
 	check(err)
 	if total == 0 {
