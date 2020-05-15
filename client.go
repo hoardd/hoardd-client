@@ -48,6 +48,7 @@ type Config struct {
 	Debug    bool   `yaml:"debug"`
 	Limit    int    `yaml:"limit"`
 	Domain   string `yaml:"domain"`
+	Email    string `yaml:"email"`
 }
 
 // Leak definition from ElasticSearch JSON structure
@@ -85,6 +86,7 @@ func main() {
 		flagPassword = flag.String("password", "", "Elasticsearch password")
 		flagOutfile  = flag.String("outfile", "", "Output filename")
 		flagDomain   = flag.String("domain", "", "domain to search")
+		flagEmail    = flag.String("email", "", "email to search")
 		flagLimit    = flag.Int("limit", 0, "Maximum number of results to return (default 1,000,000) - set to 0 for no limit")
 		flagDebug    = flag.Bool("debug", false, "Enable or disable debug output")
 		flagVerbose  = flag.Bool("verbose", false, "Enable or disable verbose output")
@@ -101,6 +103,7 @@ func main() {
 		debug    bool
 		limit    int
 		domain   string
+		email    string
 	)
 	// todo : check for path
 	// YAML args
@@ -124,6 +127,7 @@ func main() {
 		debug = cfg.Debug
 		limit = cfg.Limit
 		domain = cfg.Domain
+		email = cfg.Email
 		f.Close()
 	}
 	// check for empty args
@@ -155,8 +159,10 @@ func main() {
 	if isFlagPassed("domain") {
 		domain = *flagDomain
 	}
-	//flag.PrintDefaults()
-	//log.Fatal("Missing url parameter, exiting")
+	if isFlagPassed("email") {
+		email = *flagEmail
+	}
+
 	if inputURL == "" {
 		flag.PrintDefaults()
 		log.Fatal("Missing required url parameter, exiting")
@@ -171,9 +177,10 @@ func main() {
 		log.Fatal("Missing required password parameter, exiting")
 	} else if limit == 0 {
 		log.Printf("warning: no limit defined, this might take a LONG time")
-	} else if domain == "" {
-		flag.PrintDefaults()
-		log.Fatal("Missing required domain parameter, exiting")
+	} else if domain == "" && email == "" {
+		log.Fatal("no domain or email provided, exiting")
+	} else if domain != "" && email != "" {
+		log.Printf("warning: both email and domain were provided, email will take precedence")
 	}
 
 	// validate args
@@ -207,7 +214,7 @@ func main() {
 	}
 	// auto file output
 	if outfile == "" {
-		outfile = fmt.Sprintf("%s_%d.csv", domain, time.Now().Unix())
+		outfile = fmt.Sprintf("output_%d.csv", time.Now().Unix())
 		log.Printf("warning: no outfile specified, automatically generating one: %s", outfile)
 	}
 
@@ -217,7 +224,13 @@ func main() {
 	defer f.Close()
 	// query definition
 	searchQuery := elastic.NewBoolQuery()
-	queryString := fmt.Sprintf(`email:"*@%v"`, domain)
+	var queryString string
+	if email != "" {
+		queryString = fmt.Sprintf(`email:"%v"`, email)
+	} else {
+		queryString = fmt.Sprintf(`email:"*@%v"`, domain)
+	}
+
 	searchQuery = searchQuery.Must(elastic.NewQueryStringQuery(queryString))
 	ss := elastic.NewSearchSource().Query(searchQuery)
 	source, err := ss.Source()
