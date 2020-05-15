@@ -10,32 +10,38 @@ More data and features being added regularly.
 If you have credentials, a kibana service is provided as well for more in-depth manual investigation and browsing of other OSINT. 
 
 ## Basic Usage
-![leak_usage](https://user-images.githubusercontent.com/32488787/81986538-f9e8ae00-9605-11ea-9681-d5500076af41.png)
+1. Download release for your OS from [Releases](https://github.com/cham423/leak-client/releases)
+2. chmod +x
+3. ???
+4. Profit
+
+![image](https://user-images.githubusercontent.com/32488787/82004951-1e5a7f80-9632-11ea-99a3-a2a612691574.png)
+
 ### Help Output
 ```
-./leak-client
+Usage of ./leak-client:
   -config string
-    	path to YAML config file
+        path to YAML config file
   -debug
-    	Enable or disable debug output
+        Enable or disable debug output
   -domain string
-    	domain to search
+        domain to search
+  -email string
+        email to search
   -index string
-    	Elasticsearch index name i.e. leak_linkedin (default "leak_*")
+        Elasticsearch index name i.e. leak_linkedin (default "leak_*")
   -limit int
-    	Maximum number of results to return (default 1,000,000) - set to 0 for no limit
+        Maximum number of results to return (default 1,000,000) - set to 0 for no limit
   -outfile string
-    	Output filename
+        Output filename
   -password string
-    	Elasticsearch password
-  -sniff
-    	enable or disable cluster health check (default true)
+        Elasticsearch password
   -url string
-    	URL for ElasticsSearch endpoint
+        URL for ElasticsSearch endpoint
   -username string
-    	Elasticsearch username
+        Elasticsearch username
   -verbose
-    	Enable or disable verbose output
+        Enable or disable verbose output
 ```
 
 ## Notes
