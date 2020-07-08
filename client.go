@@ -1,7 +1,7 @@
 package main
 
 // author: cham423
-// this is an example of a client for leaks 2.0 aka the Pivot OSINT platform
+// this is an example of a client for the Hoardd OSINT platform
 
 // time estimates - 3 min per 1 million results
 // by default this script will limit you to 1 million results - bypass with flag
@@ -51,7 +51,7 @@ type Config struct {
 	Email    string `yaml:"email"`
 }
 
-// Leak definition from ElasticSearch JSON structure
+// definition from ElasticSearch JSON structure
 type Leak struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
