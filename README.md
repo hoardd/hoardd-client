@@ -1,5 +1,5 @@
-# leak-client
-This is a golang implementation of an elasticsearch client that queries the CyberBay OSINT platform for emails and passwords.
+# hoardd-client
+This is a golang implementation of an elasticsearch client that queries the Hoardd OSINT platform for emails and passwords.
 
 This version is a "beta" release, so please submit issues if you discover them.
 
@@ -10,7 +10,7 @@ More data and features being added regularly.
 If you have credentials, a kibana service is provided as well for more in-depth manual investigation and browsing of other OSINT. 
 
 ## Basic Usage
-1. Download release for your OS from [Releases](https://github.com/cham423/leak-client/releases)
+1. Download release for your OS from [Releases](https://github.com/hoardd/hoardd-client/releases)
 2. chmod +x
 3. ???
 4. Profit
@@ -19,7 +19,7 @@ If you have credentials, a kibana service is provided as well for more in-depth 
 
 ### Help Output
 ```
-Usage of ./leak-client:
+Usage of ./hoardd-client:
   -config string
         path to YAML config file
   -debug
