@@ -1,9 +1,8 @@
 # hoardd-client
-This is a golang implementation of an elasticsearch client that queries the Hoardd OSINT platform for emails and passwords.
+
+This is a golang implementation of an elasticsearch client that queries the [Hoardd OSINT platform](https://hoardd.io) for emails and passwords.
 
 This version is a "beta" release, so please submit issues if you discover them.
-
-To request a username/password, contact @cham423 or @ralphte on keybase.
 
 More data and features being added regularly.
 
@@ -28,6 +27,8 @@ Usage of ./hoardd-client:
         domain to search
   -email string
         email to search
+  -pass string 
+	password to search
   -index string
         Elasticsearch index name i.e. leak_linkedin (default "leak_*")
   -limit int
@@ -49,7 +50,7 @@ Usage of ./hoardd-client:
 - query time estimate: 3-5 min/1 million results
 
 ## Limitations
-- results are not deuplicated server-side. use cut/grep/etc to accomplish this client-side
+- email/password combos are not deuplicated server-side. use cut/grep/etc to accomplish this client-side
 - only CSV file format is supported
 - only email address and password are written to the file. this was a design decision based on the variety of different fields which could be present in a given leak
 
