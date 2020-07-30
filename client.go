@@ -49,10 +49,10 @@ type Config struct {
 	Limit    int    `yaml:"limit"`
 	Domain   string `yaml:"domain"`
 	Email    string `yaml:"email"`
-    Pass     string `yaml:"pass"`
+	Pass     string `yaml:"pass"`
 }
 
-// definition from ElasticSearch JSON structure
+// Leak definition from ElasticSearch JSON structure
 type Leak struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -131,11 +131,11 @@ func main() {
 		limit = cfg.Limit
 		domain = cfg.Domain
 		email = cfg.Email
+		pass = cfg.Pass
 		f.Close()
 	}
 	// check for empty args
 	// todo create loop through vars
-    argCount := 0
 	if isFlagPassed("url") {
 		inputURL = *flagInputURL
 	}
@@ -162,25 +162,32 @@ func main() {
 	}
 	if isFlagPassed("domain") {
 		domain = *flagDomain
-        argCount+=1
 	}
 	if isFlagPassed("email") {
 		email = *flagEmail
-        argCount+=1
 	}
 	if isFlagPassed("pass") {
 		pass = *flagPass
-        argCount+=1
 	}
-
-    if argCount == 0 {
-        log.Fatal("an argument for one of the following parameters must be supplied: "+
-                  "domain, email, or pass")
-    } else if argCount > 1 {
-        log.Fatal("domain, email, and pass parameters are mutually exclusive, i.e. "+
-                  "only one can receive a value")
-    }
-
+	// check for overlapping arguments
+	argCount := 0
+	if domain != "" {
+		argCount++
+	}
+	if email != "" {
+		argCount++
+	}
+	if pass != "" {
+		argCount++
+	}
+	if argCount == 0 {
+		log.Fatal("an argument for one of the following parameters must be supplied: " +
+			"domain, email, or pass")
+	} else if argCount > 1 {
+		log.Fatal("domain, email, and pass parameters are mutually exclusive, i.e. " +
+			"only one can receive a value")
+	}
+	// check for missing arguments
 	if inputURL == "" {
 		flag.PrintDefaults()
 		log.Fatal("Missing required url parameter, exiting")
@@ -240,15 +247,15 @@ func main() {
 	searchQuery := elastic.NewBoolQuery()
 	var queryString string
 
-    if email != "" {
+	if email != "" {
 		queryString = fmt.Sprintf(`email:"%v"`, email)
-    } else if domain != "" {
+	} else if domain != "" {
 		queryString = fmt.Sprintf(`email:"*@%v"`, domain)
-    } else if pass != "" {
+	} else if pass != "" {
 		queryString = fmt.Sprintf(`password:"%v"`, pass)
-    } else {
-        log.Fatal("email, domain, or pass parameter must be supplied")
-    }
+	} else {
+		log.Fatal("email, domain, or pass parameter must be supplied")
+	}
 
 	searchQuery = searchQuery.Must(elastic.NewQueryStringQuery(queryString))
 	ss := elastic.NewSearchSource().Query(searchQuery)
