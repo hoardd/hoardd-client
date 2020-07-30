@@ -49,9 +49,10 @@ type Config struct {
 	Limit    int    `yaml:"limit"`
 	Domain   string `yaml:"domain"`
 	Email    string `yaml:"email"`
+	Pass     string `yaml:"pass"`
 }
 
-// definition from ElasticSearch JSON structure
+// Leak definition from ElasticSearch JSON structure
 type Leak struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -86,6 +87,7 @@ func main() {
 		flagPassword = flag.String("password", "", "Elasticsearch password")
 		flagOutfile  = flag.String("outfile", "", "Output filename")
 		flagDomain   = flag.String("domain", "", "domain to search")
+		flagPass     = flag.String("pass", "", "password to search")
 		flagEmail    = flag.String("email", "", "email to search")
 		flagLimit    = flag.Int("limit", 0, "Maximum number of results to return (default 1,000,000) - set to 0 for no limit")
 		flagDebug    = flag.Bool("debug", false, "Enable or disable debug output")
@@ -104,6 +106,7 @@ func main() {
 		limit    int
 		domain   string
 		email    string
+		pass     string
 	)
 	// todo : check for path
 	// YAML args
@@ -128,6 +131,7 @@ func main() {
 		limit = cfg.Limit
 		domain = cfg.Domain
 		email = cfg.Email
+		pass = cfg.Pass
 		f.Close()
 	}
 	// check for empty args
@@ -162,7 +166,28 @@ func main() {
 	if isFlagPassed("email") {
 		email = *flagEmail
 	}
-
+	if isFlagPassed("pass") {
+		pass = *flagPass
+	}
+	// check for overlapping arguments
+	argCount := 0
+	if domain != "" {
+		argCount++
+	}
+	if email != "" {
+		argCount++
+	}
+	if pass != "" {
+		argCount++
+	}
+	if argCount == 0 {
+		log.Fatal("an argument for one of the following parameters must be supplied: " +
+			"domain, email, or pass")
+	} else if argCount > 1 {
+		log.Fatal("domain, email, and pass parameters are mutually exclusive, i.e. " +
+			"only one can receive a value")
+	}
+	// check for missing arguments
 	if inputURL == "" {
 		flag.PrintDefaults()
 		log.Fatal("Missing required url parameter, exiting")
@@ -177,10 +202,6 @@ func main() {
 		log.Fatal("Missing required password parameter, exiting")
 	} else if limit == 0 {
 		log.Printf("warning: no limit defined, this might take a LONG time")
-	} else if domain == "" && email == "" {
-		log.Fatal("no domain or email provided, exiting")
-	} else if domain != "" && email != "" {
-		log.Printf("warning: both email and domain were provided, email will take precedence")
 	}
 
 	// validate args
@@ -225,10 +246,15 @@ func main() {
 	// query definition
 	searchQuery := elastic.NewBoolQuery()
 	var queryString string
+
 	if email != "" {
 		queryString = fmt.Sprintf(`email:"%v"`, email)
-	} else {
+	} else if domain != "" {
 		queryString = fmt.Sprintf(`email:"*@%v"`, domain)
+	} else if pass != "" {
+		queryString = fmt.Sprintf(`password:"%v"`, pass)
+	} else {
+		log.Fatal("email, domain, or pass parameter must be supplied")
 	}
 
 	searchQuery = searchQuery.Must(elastic.NewQueryStringQuery(queryString))
