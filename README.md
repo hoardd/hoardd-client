@@ -1,12 +1,13 @@
 # hoardd-client
 
-This is a golang implementation of an elasticsearch client that queries the [Hoardd OSINT platform](https://hoardd.io) for emails and passwords.
+This is a golang implementation of an elasticsearch client that queries the Hoardd OSINT platform for emails and passwords.
 
-This version is a "beta" release, so please submit issues if you discover them.
+There is currently no public version of Hoardd, as it is fully owned by Optiv. However, a closed beta is starting soon.
 
-More data and features being added regularly.
+The full Hoardd tool will be released publicly eventually (hopefully in 2021)
 
-If you have credentials, a kibana service is provided as well for more in-depth manual investigation and browsing of other OSINT. 
+No actual data will be provided with the public release, but infrastructure and processing code will be present that will allow anyone to set up their own private instance of Hoardd. They could then use this client and the other code contained in the Hoardd repo to process data breaches and other OSINT data to suit their needs. :)
+
 
 ## Basic Usage
 1. Download release for your OS from [Releases](https://github.com/hoardd/hoardd-client/releases)
@@ -25,37 +26,32 @@ Usage of ./hoardd-client:
         Enable or disable debug output
   -domain string
         domain to search
+  -dumpfile string
+        JSON output filename. The entire JSON document will be written in JSON Lines format.
   -email string
         email to search
-  -pass string 
-	password to search
   -index string
         Elasticsearch index name i.e. leak_linkedin (default "leak_*")
   -limit int
         Maximum number of results to return (default 1,000,000) - set to 0 for no limit
   -outfile string
-        Output filename
+        CSV output filename. Only email, password, and breach_name are written to the CSV outfile
+  -pass string
+        password to search
   -password string
         Elasticsearch password
+  -raw string
+        raw elasticsearch query
   -url string
         URL for ElasticsSearch endpoint
   -username string
         Elasticsearch username
   -verbose
-        Enable or disable verbose output
 ```
 
 ## Notes
 - file size estimate: 50MB/1 million results
 - query time estimate: 3-5 min/1 million results
+- the speed of this client is bound by the scroll API in elasticsearch, which is not built to export huge amounts of data. if you need to output huge amounts of data, I recommend you use spark to query elasticsearch directly, then write the files to disk from spark.
 
-## Limitations
-- email/password combos are not deuplicated server-side. use cut/grep/etc to accomplish this client-side
-- only CSV file format is supported
-- only email address and password are written to the file. this was a design decision based on the variety of different fields which could be present in a given leak
-
-## TODO
-- other output formats
-- advanced built-in queries
-- custom query support
 

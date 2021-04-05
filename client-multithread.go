@@ -1,10 +1,7 @@
 package main
 
 // author: cham423
-// This is the command-line client for the Hoardd OSINT platform.
-// Currently, it is designed only to dump large amounts of results from the ES cluster and save them to CSV and JSON formats
-// For contributions, fixes, etc, use Github issues.
-// Enjoy :)
+// this is a test/developmental example of a multithreaded version of the hoardd client
 
 import (
 	"bufio"
@@ -16,16 +13,16 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/matryer/try"
 	"github.com/olivere/elastic/v7"
 	"gopkg.in/yaml.v2"
+	"golang.org/x/sync/errgroup"
 )
 
-// standard error check function
+// standard error checking
 func check(e error) {
 	if e != nil {
 		log.Fatalf("Fatal error: %s", e)
@@ -49,7 +46,7 @@ type Config struct {
 	Raw      string `yaml:"raw"`
 }
 
-// Leak definition from ElasticSearch JSON structure (only username and password)
+// Leak definition from ElasticSearch JSON structure
 type Leak struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -62,7 +59,6 @@ type Response struct {
 	Status       int
 }
 
-// hacky function to determine if a flag was provided. mainly needed for YAML/CLI option conflicts
 func isFlagPassed(name string) bool {
 	found := false
 	flag.Visit(func(f *flag.Flag) {
@@ -73,13 +69,12 @@ func isFlagPassed(name string) bool {
 	return found
 }
 
-// function to write the results of a scroll SearchResult object, which contains 10k hits.
-// todo: check paralleization capabilities of this function
 func writeToDumpFile(filename string, data elastic.SearchResult) {
 	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	w := bufio.NewWriter(f)
 	check(err)
 	defer f.Close()
+	log.Println("dumping all hits to JSON file")
 	for _, hit := range data.Hits.Hits {
 		writeString := fmt.Sprintf("%s\n", hit.Source)
 		_, err = w.WriteString(writeString)
@@ -90,9 +85,9 @@ func writeToDumpFile(filename string, data elastic.SearchResult) {
 }
 
 func main() {
-	// logging settings
+	// logging settings/
 	log.SetFlags(2)
-	// CLI args
+	// command-line args
 	var (
 		flagConfig   = flag.String("config", "", "path to YAML config file")
 		flagInputURL = flag.String("url", "", "URL for ElasticsSearch endpoint")
@@ -126,6 +121,7 @@ func main() {
 		pass     string
 		raw      string
 	)
+	// todo : check for path
 	// YAML args
 	if config != "" {
 		f, err := os.Open(config)
@@ -153,7 +149,7 @@ func main() {
 		raw = cfg.Raw
 	}
 	// check for empty args
-	// todo: compress this code, using for loop or something. not sure if there is already a slice of command line options or something.
+	// todo create loop through vars
 	if isFlagPassed("url") {
 		inputURL = *flagInputURL
 	}
@@ -193,7 +189,7 @@ func main() {
 	if isFlagPassed("raw") {
 		raw = *flagRaw
 	}
-	// check for overlapping query arguments
+	// check for overlapping arguments
 	argCount := 0
 	if domain != "" {
 		argCount++
@@ -214,7 +210,7 @@ func main() {
 		log.Fatal("domain, email, and pass parameters are mutually exclusive, i.e. " +
 			"only one can receive a value")
 	}
-	// check for missing required arguments
+	// check for missing arguments
 	if inputURL == "" {
 		flag.PrintDefaults()
 		log.Fatal("Missing required url parameter, exiting")
@@ -237,17 +233,17 @@ func main() {
 		log.Fatalf("Error parsing url parameter: %s", inputURL)
 	}
 
-	// Initialize client with retry interval
+	//create client with retry
 	var client *elastic.Client
 	check(err)
 	err = try.Do(func(attempt int) (bool, error) {
 		var err error
 		client, err = elastic.NewClient(elastic.SetURL(inputURL), elastic.SetSniff(false), elastic.SetBasicAuth(username, password))
 		if err != nil {
-			log.Printf("error connecting to elasticsearch: %s, retrying in 1m", err)
-			time.Sleep(60)
+			log.Printf("error connecting to elasticsearch: %s, retrying in 30s", err)
+			time.Sleep(30)
 		}
-		return attempt < 5, err // try 3 times
+		return attempt < 3, err // try 3 times
 	})
 	check(err)
 	// check cluster health
@@ -260,7 +256,7 @@ func main() {
 	if res.Status == "red" {
 		log.Fatal("Cluster Health is red, exiting. Contact Support.")
 	}
-	// auto-generate filenames for output and dump file
+	// auto file output
 	if outfile == "" {
 		outfile = fmt.Sprintf("output_%d.csv", time.Now().Unix())
 		log.Printf("warning: no outfile specified, automatically generating one: %s", outfile)
@@ -269,11 +265,8 @@ func main() {
 		dumpfile = fmt.Sprintf("output_%d.json", time.Now().Unix())
 	}
 
-	// check if outfile already exists, and open it with correct permissions for append if it does
-	if _, err := os.Stat(outfile); err == nil {
-		log.Printf("outfile %s already exists, and I will append all results to the outfile leading to potential duplicates.", outfile)
-	}
-	f, err := os.OpenFile(outfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// outfile - check path exists/file create permissions
+	f, err := os.Create(outfile)
 	check(err)
 	defer f.Close()
 
@@ -305,67 +298,70 @@ func main() {
 	total, err := client.Count(index).Query(searchQuery).Do(ctx)
 	check(err)
 	if total == 0 {
-		log.Fatal("0 hits returned, check your query")
-	}
-	if dumpfile != "" {
-		log.Printf("Dumping all %d hits to JSON file %s\n", total, dumpfile)
+		log.Fatal("0 results returned, check your query")
 	}
 	bar := pb.StartNew(int(total))
-	scrollSize := 10000
-	scroll := client.Scroll()
-	q := scroll.KeepAlive("2m").Size(scrollSize).Query(searchQuery).Index(index)
-	defer q.Clear(ctx)
-	t0 := time.Now()
-	t1 := time.Now()
+	// 1st goroutine for scrolling and retrieving results
 
-	for {
-		searchResult, err := q.Do(ctx)
-		actualTook := time.Now().Sub(t1)
-		if err == nil {
-			w := bufio.NewWriter(f)
-			//print headers
-			_, err := w.WriteString(fmt.Sprintf("email,password,breach_name\n"))
+	scrollSize := 1000
+	hits := make(chan json.RawMessage)
+	g, tCtx := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		defer close(hits)
+		scroll := client.Scroll().KeepAlive("2m").Size(scrollSize).Query(searchQuery).Index(index)
+		defer scroll.Clear(tCtx)
+		for {
+			searchResult, err := scroll.Do(tCtx)
+			if err == io.EOF {
+				return nil
+			}
 			check(err)
-			if verbose {
-				tookInMillis := searchResult.TookInMillis
-				log.Printf("Query Time: %+v and TookInMillis in response %+vms \n", actualTook, tookInMillis)
-			}
-			// dump file writing
-			if dumpfile != "" {
-				writeToDumpFile(dumpfile, *searchResult)
-				check(err)
-			}
 			for _, hit := range searchResult.Hits.Hits {
+				select {
+				case hits <- hit.Source:
+				case <- tCtx.Done():
+					return tCtx.Err()
+				}
+			}
+			
+			
+		}
+		return nil
+	})
+	// logger library seems to be fine with concurrent writes in a thread-safe manner
+	logger := log.New(f, "", 0)
+	// second goroutine for processing results
+	//make 10 goroutines
+	for i := 0; i < 10; i++ {
+		g.Go(func() error {
+			for hit := range hits {
 				var l *Leak
 				if debug {
-					fmt.Printf("Hit: %s\n", hit.Source)
+					fmt.Printf("Hit: %s\n", hit)
 				}
-				err := json.Unmarshal(hit.Source, &l)
-				if err != nil {
-					panic(err)
-				}
-				// eliminate empty/null results
+				err := json.Unmarshal(hit, &l)
+				check(err)
 				if len(l.Email) > 0 && l.Email != "null" {
-					_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", l.Email, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
+					err := logger.Output(2, fmt.Sprintf("%s,%s", l.Email, l.Password))
 					check(err)
 				}
-				w.Flush()
 				bar.Increment()
+
+				select {
+				default:
+				case <- tCtx.Done():
+					return tCtx.Err()
+				}
+				
 			}
-			if limit != 0 && int(bar.Current()) >= limit {
-				log.Printf("Total time %+v\n", time.Now().Sub(t0))
-				log.Fatalf("Limit of %d results reached, exiting\n", limit)
-			}
-		} else if err == io.EOF {
-			log.Printf("Total time %+v\n", time.Now().Sub(t0))
-			break
-		} else {
-			log.Printf("Load err: %s", err.Error())
-			break
-		}
-		t1 = time.Now()
+			return nil
+		})
 	}
+
+	if err := g.Wait(); err != nil {
+		panic(err)
+	}
+
 	bar.Finish()
 	log.Printf("Done")
-	f.Close()
 }
