@@ -1,6 +1,6 @@
 package main
 
-// author: cham423
+// author: cham423, eatonchips
 // This is the command-line client for the Hoardd OSINT platform.
 // Currently, it is designed only to dump large amounts of results from the ES cluster and save them to CSV and JSON formats
 // For contributions, fixes, etc, use Github issues.
@@ -10,43 +10,36 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
+
+	flag "github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/matryer/try"
 	"github.com/olivere/elastic/v7"
-	"gopkg.in/yaml.v2"
 )
 
-// standard error check function
+// Standard error check function
 func check(e error) {
 	if e != nil {
 		log.Fatalf("Fatal error: %s", e)
 	}
 }
 
-// Config definition from YAML
-type Config struct {
-	InputURL string `yaml:"url"`
-	Index    string `yaml:"index"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Outfile  string `yaml:"outfile"`
-	Dumpfile string `yaml:"dumpfile"`
-	Verbose  bool   `yaml:"verbose"`
-	Debug    bool   `yaml:"debug"`
-	Limit    int    `yaml:"limit"`
-	Domain   string `yaml:"domain"`
-	Email    string `yaml:"email"`
-	Pass     string `yaml:"pass"`
-	Raw      string `yaml:"raw"`
+// Convert boolean to integer
+func bool2int(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Leak definition from ElasticSearch JSON structure (only username and password)
@@ -62,17 +55,6 @@ type Response struct {
 	Status       int
 }
 
-// hacky function to determine if a flag was provided. mainly needed for YAML/CLI option conflicts
-func isFlagPassed(name string) bool {
-	found := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
-}
-
 // function to write the results of a scroll SearchResult object, which contains 10k hits.
 // todo: check paralleization capabilities of this function
 func writeToDumpFile(filename string, data elastic.SearchResult) {
@@ -80,11 +62,13 @@ func writeToDumpFile(filename string, data elastic.SearchResult) {
 	w := bufio.NewWriter(f)
 	check(err)
 	defer f.Close()
+
 	for _, hit := range data.Hits.Hits {
 		writeString := fmt.Sprintf("%s\n", hit.Source)
 		_, err = w.WriteString(writeString)
 		check(err)
 	}
+
 	w.Flush()
 	f.Close()
 }
@@ -92,130 +76,73 @@ func writeToDumpFile(filename string, data elastic.SearchResult) {
 func main() {
 	// logging settings
 	log.SetFlags(2)
+
 	// CLI args
-	var (
-		flagConfig   = flag.String("config", "", "path to YAML config file")
-		flagInputURL = flag.String("url", "", "URL for ElasticsSearch endpoint")
-		flagIndex    = flag.String("index", "leak_*", "Elasticsearch index name i.e. leak_linkedin")
-		flagUsername = flag.String("username", "", "Elasticsearch username")
-		flagPassword = flag.String("password", "", "Elasticsearch password")
-		flagOutfile  = flag.String("outfile", "", "CSV output filename. Only email, password, and breach_name are written to the CSV outfile")
-		flagDumpfile = flag.String("dumpfile", "", "JSON output filename. The entire JSON document will be written in JSON Lines format.")
-		flagDomain   = flag.String("domain", "", "domain to search")
-		flagPass     = flag.String("pass", "", "password to search")
-		flagRaw      = flag.String("raw", "", "raw elasticsearch query")
-		flagEmail    = flag.String("email", "", "email to search")
-		flagLimit    = flag.Int("limit", 0, "Maximum number of results to return (default 1,000,000) - set to 0 for no limit")
-		flagDebug    = flag.Bool("debug", false, "Enable or disable debug output")
-		flagVerbose  = flag.Bool("verbose", false, "Enable or disable verbose output")
-	)
+	var configFile = flag.StringP("config", "c", "", "Path to YAML config file")
+	flag.String("url", "", "ElasticsSearch url")
+	flag.StringP("index", "i", "leak_*", "Elasticsearch index name i.e. leak_linkedin")
+	flag.StringP("username", "u", "", "Elasticsearch username")
+	flag.StringP("password", "p", "", "Elasticsearch password")
+	flag.String("csv-file", "", "CSV output filename. Only email, password, and breach_name are written to the CSV file")
+	flag.String("json-file", "", "JSON output filename. The entire JSON document will be written in JSON Lines format.")
+	flag.StringSliceP("domain", "d", []string{}, "domains to search")
+	flag.StringSlice("pass", []string{}, "Passwords to search")
+	flag.StringP("query", "q", "", "Raw elasticsearch query")
+	flag.StringSliceP("email", "e", []string{}, "Emails to search")
+	flag.Int("limit", 0, "Maximum number of results to return (default 1,000,000) - set to 0 for no limit")
+	flag.Bool("debug", false, "Enable debug output")
+	flag.BoolP("verbose", "v", false, "Enable verbose output")
 	flag.Parse()
-	var config = *flagConfig
+
+	// Get user home directory
+	homeDir, err := os.UserHomeDir()
+	check(err)
+
+	// Config file
+	viper.BindPFlags(flag.CommandLine)
+	viper.SetConfigName("config")
+	if *configFile != "" {
+		viper.SetConfigName(*configFile)
+	}
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(path.Join(homeDir, "go/src/github.com/hoardd/hoardd-client/"))
+	viper.AddConfigPath(".")
+	viper.ReadInConfig()
+
 	var (
-		inputURL string
-		index    string
-		username string
-		password string
-		outfile  string
-		dumpfile string
-		verbose  bool
-		debug    bool
-		limit    int
-		domain   string
-		email    string
-		pass     string
-		raw      string
+		URL        = viper.GetString("url")
+		index      = viper.GetString("index")
+		username   = viper.GetString("username")
+		password   = viper.GetString("password")
+		CSVFile    = viper.GetString("csv-file")
+		JSONFile   = viper.GetString("json-file")
+		verbose    = viper.GetBool("verbose")
+		debug      = viper.GetBool("debug")
+		limit      = viper.GetInt("limit")
+		domainList = viper.GetStringSlice("domain")
+		emailList  = viper.GetStringSlice("email")
+		passList   = viper.GetStringSlice("pass")
+		query      = viper.GetString("query")
 	)
-	// YAML args
-	if config != "" {
-		f, err := os.Open(config)
-		check(err)
-		defer f.Close()
-		var cfg Config
-		decoder := yaml.NewDecoder(f)
-		err = decoder.Decode(&cfg)
-		check(err)
-		if debug {
-			log.Printf("config dump: %+v", cfg)
-		}
-		inputURL = cfg.InputURL
-		index = cfg.Index
-		username = cfg.Username
-		password = cfg.Password
-		outfile = cfg.Outfile
-		dumpfile = cfg.Dumpfile
-		verbose = cfg.Verbose
-		debug = cfg.Debug
-		limit = cfg.Limit
-		domain = cfg.Domain
-		email = cfg.Email
-		pass = cfg.Pass
-		raw = cfg.Raw
+
+	// Check that one type of lookup argument was provided
+	typeArgs := 0
+	typeArgs += bool2int(len(domainList) != 0)
+	typeArgs += bool2int(len(emailList) != 0)
+	typeArgs += bool2int(len(passList) != 0)
+	typeArgs += bool2int(query != "")
+	if typeArgs > 1 {
+		flag.PrintDefaults()
+		log.Fatal("Only one of the following parameters may be supplied: " +
+			"domain, email, pass, or query")
+	} else if typeArgs < 1 {
+		flag.PrintDefaults()
+		log.Fatal("One of the following parameters must be supplied: " +
+			"domain, email, pass, or query")
 	}
-	// check for empty args
-	// todo: compress this code, using for loop or something. not sure if there is already a slice of command line options or something.
-	if isFlagPassed("url") {
-		inputURL = *flagInputURL
-	}
-	if isFlagPassed("index") {
-		index = *flagIndex
-	}
-	if isFlagPassed("username") {
-		username = *flagUsername
-	}
-	if isFlagPassed("password") {
-		password = *flagPassword
-	}
-	if isFlagPassed("outfile") {
-		outfile = *flagOutfile
-	}
-	if isFlagPassed("dumpfile") {
-		dumpfile = *flagDumpfile
-	}
-	if isFlagPassed("verbose") {
-		verbose = *flagVerbose
-	}
-	if isFlagPassed("debug") {
-		debug = *flagDebug
-	}
-	if isFlagPassed("limit") {
-		limit = *flagLimit
-	}
-	if isFlagPassed("domain") {
-		domain = *flagDomain
-	}
-	if isFlagPassed("email") {
-		email = *flagEmail
-	}
-	if isFlagPassed("pass") {
-		pass = *flagPass
-	}
-	if isFlagPassed("raw") {
-		raw = *flagRaw
-	}
-	// check for overlapping query arguments
-	argCount := 0
-	if domain != "" {
-		argCount++
-	}
-	if email != "" {
-		argCount++
-	}
-	if pass != "" {
-		argCount++
-	}
-	if raw != "" {
-		argCount++
-	}
-	if argCount == 0 {
-		log.Fatal("an argument for one of the following parameters must be supplied: " +
-			"domain, email, or pass")
-	} else if argCount > 1 {
-		log.Fatal("domain, email, and pass parameters are mutually exclusive, i.e. " +
-			"only one can receive a value")
-	}
-	// check for missing required arguments
-	if inputURL == "" {
+
+	// Check for required elasticsearch arguments
+	if URL == "" {
 		flag.PrintDefaults()
 		log.Fatal("Missing required url parameter, exiting")
 	} else if index == "" {
@@ -231,10 +158,10 @@ func main() {
 		log.Printf("warning: no limit defined, this might take a LONG time")
 	}
 
-	// validate args
-	_, err := url.ParseRequestURI(inputURL)
+	// Validate args
+	_, err = url.ParseRequestURI(URL)
 	if err != nil {
-		log.Fatalf("Error parsing url parameter: %s", inputURL)
+		log.Fatalf("Error parsing url parameter: %s", URL)
 	}
 
 	// Initialize client with retry interval
@@ -242,15 +169,16 @@ func main() {
 	check(err)
 	err = try.Do(func(attempt int) (bool, error) {
 		var err error
-		client, err = elastic.NewClient(elastic.SetURL(inputURL), elastic.SetSniff(false), elastic.SetBasicAuth(username, password))
+		client, err = elastic.NewClient(elastic.SetURL(URL), elastic.SetSniff(false), elastic.SetBasicAuth(username, password))
 		if err != nil {
 			log.Printf("error connecting to elasticsearch: %s, retrying in 1m", err)
 			time.Sleep(60)
 		}
-		return attempt < 5, err // try 3 times
+		return attempt < 5, err // try 5 times
 	})
 	check(err)
-	// check cluster health
+
+	// Check cluster health
 	ctx := context.Background()
 	res, err := client.ClusterHealth().Index(index).Do(ctx)
 	check(err)
@@ -260,91 +188,126 @@ func main() {
 	if res.Status == "red" {
 		log.Fatal("Cluster Health is red, exiting. Contact Support.")
 	}
-	// auto-generate filenames for output and dump file
-	if outfile == "" {
-		outfile = fmt.Sprintf("output_%d.csv", time.Now().Unix())
-		log.Printf("warning: no outfile specified, automatically generating one: %s", outfile)
+
+	// Auto-generate filenames for output and dump file
+	if CSVFile == "" {
+		CSVFile = fmt.Sprintf("output_%d.csv", time.Now().Unix())
+		log.Printf("warning: no csv file specified, automatically generating one: %s", CSVFile)
 	}
-	if dumpfile == "" {
-		dumpfile = fmt.Sprintf("output_%d.json", time.Now().Unix())
+	if JSONFile == "" {
+		JSONFile = fmt.Sprintf("output_%d.json", time.Now().Unix())
 	}
 
-	// check if outfile already exists, and open it with correct permissions for append if it does
-	if _, err := os.Stat(outfile); err == nil {
-		log.Printf("outfile %s already exists, and I will append all results to the outfile leading to potential duplicates.", outfile)
+	// Check if CSVFile already exists, and open it with correct permissions for append if it does
+	if _, err := os.Stat(CSVFile); err == nil {
+		log.Printf("CSVFile %s already exists, and I will append all results to the CSVFile leading to potential duplicates.", CSVFile)
 	}
-	f, err := os.OpenFile(outfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(CSVFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	check(err)
 	defer f.Close()
 
-	// query definitions
+	// Query definitions
 	var queryString string
-	// these queries are pulled straight from kibana
-	if email != "" {
-		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "email:\"%s\""}}]}}`, email)
-	} else if domain != "" {
-		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "email:\"*@%s\"","analyze_wildcard": true}}]}}`, domain)
-	} else if pass != "" {
-		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "password:\"%s\""}}]}}`, pass)
-	} else if raw != "" {
-		queryString = fmt.Sprintf(`%s`, raw)
+	// These queries are pulled straight from kibana
+	if len(emailList) != 0 {
+		// Email query
+		for i, e := range emailList {
+			emailList[i] = fmt.Sprintf(`email:\"%s\"`, e)
+		}
+		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "%s"}}]}}`, strings.Join(emailList, " OR "))
+
+	} else if len(domainList) != 0 {
+		// Domain query
+		for i, e := range domainList {
+			domainList[i] = fmt.Sprintf(`email:\"*@%s\"`, e)
+		}
+		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "%s", "analyze_wildcard": true}}]}}`, strings.Join(domainList, " OR "))
+	} else if len(passList) != 0 {
+		// Password query
+		for i, e := range passList {
+			passList[i] = fmt.Sprintf(`password:\"%s\"`, e)
+		}
+		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "%s"}}]}}`, strings.Join(passList, " OR "))
+	} else if query != "" {
+		// Raw query
+		queryString = query
 	} else {
-		log.Fatal("email, domain, pass, or raw parameter must be supplied")
+		log.Fatal("email, domain, pass, or query parameter must be supplied")
 	}
+
+	// Generate search query
 	searchQuery := elastic.NewRawStringQuery(queryString)
 	ss := elastic.NewSearchSource().Query(searchQuery)
 	source, err := ss.Source()
 	check(err)
+
+	// Marshal query
 	data, err := json.Marshal(source)
 	check(err)
+
 	if verbose {
 		fmt.Printf("Raw Query: %s\n\n", string(data))
 	}
+
+	// Count results of query
 	fmt.Printf("Counting total hits, please wait...")
-	//count results of query
 	total, err := client.Count(index).Query(searchQuery).Do(ctx)
 	check(err)
+
 	if total == 0 {
 		log.Fatal("0 hits returned, check your query")
 	}
-	if dumpfile != "" {
-		log.Printf("Dumping all %d hits to JSON file %s\n", total, dumpfile)
+	if JSONFile != "" {
+		log.Printf("Dumping all %d hits to JSON file %s\n", total, JSONFile)
 	}
+
 	bar := pb.StartNew(int(total))
 	scrollSize := 10000
 	scroll := client.Scroll()
+
 	q := scroll.KeepAlive("2m").Size(scrollSize).Query(searchQuery).Index(index)
 	defer q.Clear(ctx)
+
 	t0 := time.Now()
 	t1 := time.Now()
 
+	// Scroll through results
 	for {
 		searchResult, err := q.Do(ctx)
 		actualTook := time.Now().Sub(t1)
+
 		if err == nil {
 			w := bufio.NewWriter(f)
-			//print headers
+			// Print headers
 			_, err := w.WriteString(fmt.Sprintf("email,password,breach_name\n"))
 			check(err)
+
+			// Print query time
 			if verbose {
 				tookInMillis := searchResult.TookInMillis
 				log.Printf("Query Time: %+v and TookInMillis in response %+vms \n", actualTook, tookInMillis)
 			}
-			// dump file writing
-			if dumpfile != "" {
-				writeToDumpFile(dumpfile, *searchResult)
+
+			// Dump file writing
+			if JSONFile != "" {
+				writeToDumpFile(JSONFile, *searchResult)
 				check(err)
 			}
+
+			// Loop through each result
 			for _, hit := range searchResult.Hits.Hits {
 				var l *Leak
 				if debug {
 					fmt.Printf("Hit: %s\n", hit.Source)
 				}
+
+				// Convert result to json
 				err := json.Unmarshal(hit.Source, &l)
 				if err != nil {
 					panic(err)
 				}
-				// eliminate empty/null results
+
+				// Eliminate empty/null results
 				if len(l.Email) > 0 && l.Email != "null" {
 					_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", l.Email, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
 					check(err)
@@ -352,10 +315,12 @@ func main() {
 				w.Flush()
 				bar.Increment()
 			}
+
 			if limit != 0 && int(bar.Current()) >= limit {
 				log.Printf("Total time %+v\n", time.Now().Sub(t0))
 				log.Fatalf("Limit of %d results reached, exiting\n", limit)
 			}
+
 		} else if err == io.EOF {
 			log.Printf("Total time %+v\n", time.Now().Sub(t0))
 			break
@@ -365,6 +330,7 @@ func main() {
 		}
 		t1 = time.Now()
 	}
+
 	bar.Finish()
 	log.Printf("Done")
 	f.Close()
