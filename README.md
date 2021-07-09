@@ -15,7 +15,7 @@ No actual data will be provided with the public release, but infrastructure and 
 3. ???
 4. Profit
 
-![image](https://user-images.githubusercontent.com/32488787/82004951-1e5a7f80-9632-11ea-99a3-a2a612691574.png)
+![image](https://user-images.githubusercontent.com/32488787/125102058-e2417400-e0a8-11eb-9a2e-d7928cd9c7dd.png)
 
 ### Help Output
 ```
