@@ -15,7 +15,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -94,20 +93,22 @@ func main() {
 	flag.BoolP("verbose", "v", false, "Enable verbose output")
 	flag.Parse()
 
-	// Get user home directory
-	homeDir, err := os.UserHomeDir()
-	check(err)
-
 	// Config file
 	viper.BindPFlags(flag.CommandLine)
-	viper.SetConfigName("config")
-	if *configFile != "" {
-		viper.SetConfigName(*configFile)
-	}
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(path.Join(homeDir, "go/src/github.com/hoardd/hoardd-client/"))
-	viper.AddConfigPath(".")
-	viper.ReadInConfig()
+	// If no config file provided, attempt to load from ./config.yml
+	if *configFile == "" {
+		viper.SetConfigName("config")
+		viper.AddConfigPath(".")
+		viper.ReadInConfig()
+	} else {
+		log.Printf("Using config file: %s\n", *configFile)
+		f, err := os.Open(*configFile)
+		check(err)
+		defer f.Close()
+
+		viper.ReadConfig(f)
+	}
 
 	var (
 		URL        = viper.GetString("url")
@@ -124,6 +125,13 @@ func main() {
 		passList   = viper.GetStringSlice("pass")
 		query      = viper.GetString("query")
 	)
+
+	// Display config variables
+	if debug {
+		for k, v := range viper.AllSettings() {
+			fmt.Printf("%s: %v\n", k, v)
+		}
+	}
 
 	// Check that one type of lookup argument was provided
 	typeArgs := 0
@@ -159,7 +167,7 @@ func main() {
 	}
 
 	// Validate args
-	_, err = url.ParseRequestURI(URL)
+	_, err := url.ParseRequestURI(URL)
 	if err != nil {
 		log.Fatalf("Error parsing url parameter: %s", URL)
 	}
