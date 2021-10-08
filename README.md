@@ -20,33 +20,20 @@ No actual data will be provided with the public release, but infrastructure and 
 ### Help Output
 ```
 Usage of ./hoardd-client:
-  -config string
-        path to YAML config file
-  -debug
-        Enable or disable debug output
-  -domain string
-        domain to search
-  -dumpfile string
-        JSON output filename. The entire JSON document will be written in JSON Lines format.
-  -email string
-        email to search
-  -index string
-        Elasticsearch index name i.e. leak_linkedin (default "leak_*")
-  -limit int
-        Maximum number of results to return (default 1,000,000) - set to 0 for no limit
-  -outfile string
-        CSV output filename. Only email, password, and breach_name are written to the CSV outfile
-  -pass string
-        password to search
-  -password string
-        Elasticsearch password
-  -raw string
-        raw elasticsearch query
-  -url string
-        URL for ElasticsSearch endpoint
-  -username string
-        Elasticsearch username
-  -verbose
+  -c, --config string      Path to YAML config file
+      --csv-file string    CSV output filename. Only email, password, and breach_name are written to the CSV file
+      --debug              Enable debug output
+  -d, --domain strings     domains to search
+  -e, --email strings      Emails to search
+  -i, --index string       Elasticsearch index name i.e. leak_linkedin (default "leak_*")
+      --json-file string   JSON output filename. The entire JSON document will be written in JSON Lines format.
+      --limit int          Maximum number of results to return (default 1,000,000) - set to 0 for no limit
+      --pass strings       Passwords to search
+  -p, --password string    Elasticsearch password
+  -q, --query string       Raw elasticsearch query
+      --url string         ElasticsSearch url
+  -u, --username string    Elasticsearch username
+  -v, --verbose            Enable verbose output
 ```
 
 ## Notes
