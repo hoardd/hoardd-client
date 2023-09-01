@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -15,11 +14,13 @@ import (
 	"os"
 	"time"
 
+	flag "github.com/spf13/pflag"
+
 	"github.com/cheggaaa/pb/v3"
 	"github.com/matryer/try"
 	"github.com/olivere/elastic/v7"
-	"gopkg.in/yaml.v2"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v2"
 )
 
 // standard error checking
@@ -319,12 +320,11 @@ func main() {
 			for _, hit := range searchResult.Hits.Hits {
 				select {
 				case hits <- hit.Source:
-				case <- tCtx.Done():
+				case <-tCtx.Done():
 					return tCtx.Err()
 				}
 			}
-			
-			
+
 		}
 		return nil
 	})
@@ -349,10 +349,10 @@ func main() {
 
 				select {
 				default:
-				case <- tCtx.Done():
+				case <-tCtx.Done():
 					return tCtx.Err()
 				}
-				
+
 			}
 			return nil
 		})
