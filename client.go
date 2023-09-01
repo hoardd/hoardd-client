@@ -220,14 +220,17 @@ func main() {
 	if len(emailList) != 0 {
 		// Email query
 		for i, e := range emailList {
-			emailList[i] = fmt.Sprintf(`email:\"%s\"`, e)
+			queryEmail := fmt.Sprintf(`email:\"%s\"`, e)
+			queryUsername := fmt.Sprintf(`username:\"%s\"`, e)
+			emailList[i] = fmt.Sprintf("(%s OR %s)", queryEmail, queryUsername)
 		}
 		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "%s"}}]}}`, strings.Join(emailList, " OR "))
-
 	} else if len(domainList) != 0 {
 		// Domain query
 		for i, e := range domainList {
-			domainList[i] = fmt.Sprintf(`email:\"*@%s\"`, e)
+			queryEmailDomain := fmt.Sprintf(`email:\"*@%s\"`, e)
+			queryUsernameDomain := fmt.Sprintf(`username:\"*@%s\"`, e)
+			domainList[i] = fmt.Sprintf("(%s OR %s)", queryEmailDomain, queryUsernameDomain)
 		}
 		queryString = fmt.Sprintf(`{"bool":{"must": [{"query_string": {"query": "%s", "analyze_wildcard": true}}]}}`, strings.Join(domainList, " OR "))
 	} else if len(passList) != 0 {
