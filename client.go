@@ -45,6 +45,7 @@ func bool2int(b bool) int {
 type Leak struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Username string `json:"username"`
 }
 
 // Response definition from ElasticSearch
@@ -180,7 +181,7 @@ func main() {
 		client, err = elastic.NewClient(elastic.SetURL(URL), elastic.SetSniff(false), elastic.SetBasicAuth(username, password))
 		if err != nil {
 			log.Printf("error connecting to elasticsearch: %s, retrying in 1m", err)
-			time.Sleep(60)
+			time.Sleep(60 * time.Second)
 		}
 		return attempt < 5, err // try 5 times
 	})
@@ -285,12 +286,12 @@ func main() {
 	// Scroll through results
 	for {
 		searchResult, err := q.Do(ctx)
-		actualTook := time.Now().Sub(t1)
+		actualTook := time.Since(t1)
 
 		if err == nil {
 			w := bufio.NewWriter(f)
 			// Print headers
-			_, err := w.WriteString(fmt.Sprintf("email,password,breach_name\n"))
+			_, err := w.WriteString("email,password,breach_name\n")
 			check(err)
 
 			// Print query time
@@ -322,18 +323,21 @@ func main() {
 				if len(l.Email) > 0 && l.Email != "null" {
 					_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", l.Email, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
 					check(err)
+				} else if len(l.Username) > 0 && l.Username != "null" {
+					_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", l.Username, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
+					check(err)
 				}
 				w.Flush()
 				bar.Increment()
 			}
 
 			if limit != 0 && int(bar.Current()) >= limit {
-				log.Printf("Total time %+v\n", time.Now().Sub(t0))
+				log.Printf("Total time %+v\n", time.Since(t0))
 				log.Fatalf("Limit of %d results reached, exiting\n", limit)
 			}
 
 		} else if err == io.EOF {
-			log.Printf("Total time %+v\n", time.Now().Sub(t0))
+			log.Printf("Total time %+v\n", time.Since(t0))
 			break
 		} else {
 			log.Printf("Load err: %s", err.Error())
