@@ -1,8 +1,6 @@
 package main
 
 // author: cham423, eatonchips
-// This is the command-line client for the Hoardd OSINT platform.
-// Currently, it is designed only to dump large amounts of results from the ES cluster and save them to CSV and JSON formats
 // For contributions, fixes, etc, use Github issues.
 // Enjoy :)
 
@@ -43,9 +41,9 @@ func bool2int(b bool) int {
 
 // Leak definition from ElasticSearch JSON structure (only username and password)
 type Leak struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Username string `json:"username"`
+	Email    interface{} `json:"email"`
+	Password string      `json:"password"`
+	Username string      `json:"username"`
 }
 
 // Response definition from ElasticSearch
@@ -201,19 +199,25 @@ func main() {
 	// Auto-generate filenames for output and dump file
 	if CSVFile == "" {
 		CSVFile = fmt.Sprintf("output_%d.csv", time.Now().Unix())
-		log.Printf("warning: no csv file specified, automatically generating one: %s", CSVFile)
+		log.Printf("warning: no CSV file specified, automatically generating one: %s\n", CSVFile)
 	}
 	if JSONFile == "" {
 		JSONFile = fmt.Sprintf("output_%d.json", time.Now().Unix())
+		log.Printf("warning: no JSON file specified, automatically generating one: %s\n", JSONFile)
 	}
 
-	// Check if CSVFile already exists, and open it with correct permissions for append if it does
+	// Check if output files already exist, and open them in append mode if so
+	// CSV
 	if _, err := os.Stat(CSVFile); err == nil {
-		log.Printf("CSVFile %s already exists, and I will append all results to the CSVFile leading to potential duplicates.", CSVFile)
+		log.Printf("Output file %s already exists, will append results", CSVFile)
 	}
 	f, err := os.OpenFile(CSVFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	check(err)
 	defer f.Close()
+	// JSON
+	if _, err := os.Stat(JSONFile); err == nil {
+		log.Printf("Output file %s already exists, will append results", JSONFile)
+	}
 
 	// Query definitions
 	var queryString string
@@ -262,18 +266,20 @@ func main() {
 	}
 
 	// Count results of query
-	fmt.Printf("Counting total hits, please wait...")
+	fmt.Printf("Counting total hits, please wait... ")
 	total, err := client.Count(index).Query(searchQuery).Do(ctx)
 	check(err)
-
+	fmt.Printf("%d total hits\n", total)
 	if total == 0 {
-		log.Fatal("0 hits returned, check your query")
+		log.Println("0 hits returned, check your query")
 	}
-	if JSONFile != "" {
-		log.Printf("Dumping all %d hits to JSON file %s\n", total, JSONFile)
+	// pb
+	var bar pb.ProgressBar
+	if limit > 0 {
+		bar = *pb.New(limit)
+	} else {
+		bar = *pb.New64(total)
 	}
-
-	bar := pb.StartNew(int(total))
 	scrollSize := 10000
 	scroll := client.Scroll()
 
@@ -289,6 +295,7 @@ func main() {
 		actualTook := time.Since(t1)
 
 		if err == nil {
+			bar.Start()
 			w := bufio.NewWriter(f)
 			// Print headers
 			_, err := w.WriteString("email,password,breach_name\n")
@@ -318,12 +325,27 @@ func main() {
 				if err != nil {
 					panic(err)
 				}
-
-				// Eliminate empty/null results
-				if len(l.Email) > 0 && l.Email != "null" {
-					_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", l.Email, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
-					check(err)
-				} else if len(l.Username) > 0 && l.Username != "null" {
+				// Write email records
+				switch v := l.Email.(type) {
+				case string:
+					// Eliminate empty/null results
+					if len(v) > 0 && v != "null" {
+						_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", v, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
+						check(err)
+					}
+				case []interface{}:
+					for _, element := range v {
+						switch v := element.(type) {
+						case string:
+							if len(v) > 0 && element != "null" {
+								_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", v, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
+								check(err)
+							}
+						}
+					}
+				}
+				// write usernames, but filter to only email-like usernames
+				if len(l.Username) > 0 && strings.Contains(l.Username, "@") && l.Username != "null" {
 					_, err := w.WriteString(fmt.Sprintf("%s,%s,%s\n", l.Username, l.Password, strings.Replace(hit.Index, "leak_", "", 1)))
 					check(err)
 				}
@@ -332,11 +354,14 @@ func main() {
 			}
 
 			if limit != 0 && int(bar.Current()) >= limit {
+				bar.Finish()
+				log.Printf("Limit of %d results reached, exiting\n", limit)
 				log.Printf("Total time %+v\n", time.Since(t0))
-				log.Fatalf("Limit of %d results reached, exiting\n", limit)
+				break
 			}
 
 		} else if err == io.EOF {
+			bar.Finish()
 			log.Printf("Total time %+v\n", time.Since(t0))
 			break
 		} else {
@@ -346,7 +371,6 @@ func main() {
 		t1 = time.Now()
 	}
 
-	bar.Finish()
 	log.Printf("Done")
 	f.Close()
 }

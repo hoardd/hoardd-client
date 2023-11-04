@@ -1,23 +1,24 @@
-# hoardd-client
+## hoardd-client
 
-This is a golang implementation of an elasticsearch client that queries the Hoardd OSINT platform for emails and passwords.
+This is a golang implementation of an elasticsearch client that queries a customized elasticsearch instance containing data breaches. 
 
-There is currently no public version of Hoardd, as it is fully owned by Optiv. However, a closed beta is starting soon.
-
-The full Hoardd tool will be released publicly eventually (hopefully in 2021)
-
-No actual data will be provided with the public release, but infrastructure and processing code will be present that will allow anyone to set up their own private instance of Hoardd. They could then use this client and the other code contained in the Hoardd repo to process data breaches and other OSINT data to suit their needs. :)
-
-
-## Basic Usage
+## Binary Usage
 1. Download release for your OS from [Releases](https://github.com/hoardd/hoardd-client/releases)
-2. chmod +x
-3. ???
-4. Profit
+1. Extract release, make it executable
+1. Create a configuration file based on `config.yml` that includes credentials, a target server, etc.`
+1. Execute the client:
+```sh
+./hoardd-client -c config.yml -d gmail.com
+```
+## Source Usage
+1. Install Go on your system.
+1. Clone this git repository to your system `git clone https://github.com/hoardd/hoardd-client`
+1. Execute the client:
+```sh
+go run . c config.yml -d gmail.com
+```
 
-![image](https://user-images.githubusercontent.com/32488787/125102058-e2417400-e0a8-11eb-9a2e-d7928cd9c7dd.png)
-
-### Help Output
+## Help Output
 ```
 Usage of ./hoardd-client:
   -c, --config string      Path to YAML config file
@@ -35,10 +36,4 @@ Usage of ./hoardd-client:
   -u, --username string    Elasticsearch username
   -v, --verbose            Enable verbose output
 ```
-
-## Notes
-- file size estimate: 50MB/1 million results
-- query time estimate: 3-5 min/1 million results
-- the speed of this client is bound by the scroll API in elasticsearch, which is not built to export huge amounts of data. if you need to output huge amounts of data, I recommend you use spark to query elasticsearch directly, then write the files to disk from spark.
-
 

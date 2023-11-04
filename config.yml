@@ -4,6 +4,6 @@ username: ""
 password: ""
 domain: ""
 email: ""
-limit: 1000000
+limit: 0
 debug: false
-verbose: true
+verbose: false
