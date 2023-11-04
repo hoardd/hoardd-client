@@ -1,2 +1,6 @@
+.gitignore
 *.csv
 *.json
+.DS_Store
+hoardd-client
+.goreleaser.yaml
